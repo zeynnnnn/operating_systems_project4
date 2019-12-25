@@ -216,7 +216,7 @@ int sfs_create(char *filename)
      aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
      for (int k =1;k<8;k++)
      {
-         read_block(&(fileBlocks[k-1]),k);
+         read_block(&fileBlocks[k-1],k);
      }
 
     int i=-1;
@@ -232,10 +232,11 @@ int sfs_create(char *filename)
                break;
        }
        printf("i:%d y:%d",i,y);
-        aFileEntry iter =  fileBlocks[i][y];
-       strcpy ( iter.filename,filename);
-       iter.exist='Y';
-       iter.fileLength=0;
+        aFileEntry * iter ;
+        iter=& fileBlocks[i][y];
+       strcpy ( iter->filename,filename);
+       iter->exist='Y';
+       iter->fileLength=0;
        write_block(fileBlocks[i],i+1); //1 comes from superblock
 
     return (0);
