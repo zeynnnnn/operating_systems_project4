@@ -26,6 +26,7 @@ int main()
 	printf ("there was an error in creating the disk\n");
 	exit(1); 
     }
+
     ret = sfs_format (DISKNAME);
     if (ret != 0) {
 	printf ("there was an error in format\n");
@@ -43,7 +44,8 @@ int main()
     sfs_create ("file1.bin");
     sfs_create ("file2.bin");
     sfs_create ("file3.bin");
-
+    printf (" files created\n");
+/*
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND); 
     for (i = 0; i < 10000; ++i) {
@@ -76,7 +78,8 @@ int main()
 	sfs_read (fd, (void *) buffer, 1);
 	c = (char) buffer[0];
     }
-    sfs_close (fd); 
+
+    sfs_close (fd); */
     
     ret = sfs_umount(); 
 }

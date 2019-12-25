@@ -13,17 +13,21 @@ int vdisk_fd; // global virtual disk file descriptor
               // any function in this file can use this.
 
 int size;
-struct aOpenFileEntry {
+
+typedef struct  {
     char exist;
     int mode;
     long openFilePointer;
-} ;
-struct aFileEntry{
-    char filename[32];
-    long startBlock;
+} aOpenFileEntry;
+
+typedef struct {
     int fileLength;
-    char notUsed [128-32- sizeof(long)- sizeof(int)];
-} ;
+    long startBlock;
+    char exist;
+    char filename[32];
+    char notUsed [78];
+}aFileEntry ;
+
 // This function is simply used to a create a virtual disk
 // (a simple Linux file including all zeros) of the specified size.
 // You can call this function from an app to create a virtual disk.
@@ -32,8 +36,7 @@ struct aFileEntry{
 // size = 2^m Bytes
 int create_vdisk (char *vdiskfilename, int m)
 {
-    char command[BLOCKSIZE]; 
-
+    char command[BLOCKSIZE];
     int num = 1;
     int count; 
     size  = num << m;
@@ -56,14 +59,15 @@ int read_block (void *block, int k)
 {
     int n;
     int offset;
-
-    offset = k * BLOCKSIZE; 
+    offset = k * BLOCKSIZE;
+    lseek(vdisk_fd, (off_t) offset, SEEK_SET);
     n = read (vdisk_fd, block, BLOCKSIZE);
+    printf("n:%d\n",n) ;
     if (n != BLOCKSIZE) {
-	printf ("read error\n");
-	return -1;
+        printf ("read error\n");
+        return -1;
     }
-    return (0); 
+    return (0);
 }
 
 // write block k into the virtual disk. 
@@ -71,14 +75,18 @@ int write_block (void *block, int k)
 {
     int n;
     int offset;
-    offset = k * BLOCKSIZE; 
+
+    offset = k * BLOCKSIZE;
+    lseek(vdisk_fd, (off_t) offset, SEEK_SET);
     n = write (vdisk_fd, block, BLOCKSIZE);
     if (n != BLOCKSIZE) {
-	printf ("write error\n");
-	return (-1);
+        printf ("write error\n");
+        return (-1);
     }
-    return 0; 
+    return 0;
 }
+
+
 
 
 /**********************************************************************
@@ -87,63 +95,102 @@ int write_block (void *block, int k)
 
 int sfs_format (char *vdiskname)
 {
-    int mainFd = open(vdiskname,O_WRONLY | O_APPEND);
+
+    int mainFd = open(vdiskname,O_RDWR );
+    vdisk_fd = mainFd;
     if(mainFd < 0)
     {
         printf ("Error source:1  \n");
         return -1;
     }
 
-    int arr[1024/ sizeof(int)];
-    memset(arr, -1,1024/ sizeof(int));
     //Super Block init
-   int writenByteCount= write(mainFd,&size, sizeof(size));
-    if(writenByteCount <= 0)
-    {  printf ("Error source:2  \n");
+
+    char superblock[BLOCKSIZE];
+    for (int j = 0; j < BLOCKSIZE; ++j) {
+        superblock[j]='k';
+    }
+   // *(int*)superblock= size;
+     aOpenFileEntry emptyOpenFile = {'N',-1,NULL};
+   // printf("exist: %c \n",emptyOpenFile.exist);
+    for (int i = 0; i < 10; i++) {
+        *( aOpenFileEntry*)(superblock+ i* sizeof( aOpenFileEntry)+ sizeof(int))=  emptyOpenFile;
+     //  printf("Struct in the will be written:%d\n\n" ,( *( aOpenFileEntry*)(superblock+i* sizeof( aOpenFileEntry)+ sizeof(int))).mode);
+    }
+ /*   for (int j = 0; j < BLOCKSIZE; j++) {
+        printf("%c",superblock[j]);
+    }*/
+   int writenByteCount= write_block(superblock,0);
+    if(writenByteCount < 0)
+    {
+        printf ("Error source:2  \n");
         return -1;
     }
-
-    struct aOpenFileEntry emptyOpenFile;
-    emptyOpenFile.exist="N";
-    emptyOpenFile.mode=" ";
-    emptyOpenFile.openFilePointer=NULL;
-    for (int i = 0; i < 10; i++) {
-        writenByteCount=  write(mainFd,&emptyOpenFile, sizeof(emptyOpenFile));
-        if(writenByteCount <= 0)
-        {  printf ("Error source:3  \n");
-            return -1;
+    char written[BLOCKSIZE] ;
+    for (int j = 0; j < BLOCKSIZE; j++) {
+        written[j]='O';
+    }
+   /* printf("Written From file: %s \n", written);
+    printf("Written From file: %d \n", sizeof(written));*/
+    /*  if (read_block(written,0)==0) // read succesfull                            ///test
+      {
+          aOpenFileEntry * wr ;
+          wr =((char*)written+1);
+         //for (int j = 0; j < BLOCKSIZE; j++) {
+         //   printf("%c",written[j]);
+         //}
+   //    printf("Written From file: %d \n", sizeof(written));
+    for (int j = 0; j < 10;j++) {
+        aOpenFileEntry * wr ;
+        wr =((char*)written+j* sizeof( aOpenFileEntry)+ sizeof(int));
+           //  aOpenFileEntry wr =*( aOpenFileEntry*)(written[1+j* sizeof( aOpenFileEntry)]);
+            printf("WrittenFrom file: %c\n",wr->exist);
         }
     }
-    writenByteCount=  write(mainFd,arr, 1024- sizeof(size)-10* sizeof(emptyOpenFile));
-    if(writenByteCount <= 0)
-        return -1;
-
+    else
+        printf("boj");*/
     //file directory entries init
-    struct aFileEntry emptyEntry= {0,NULL,"",""};
-  /*  emptyEntry.fileLength=0;
-    emptyEntry.startBlock=NULL;
-    emptyEntry.filename="";
-    memcpy(emptyEntry.filename,    "", 0);*/
-    for (int t=0;t<7*8;t++){
-        writenByteCount=  write(mainFd,&emptyEntry, sizeof(struct aFileEntry));
-        if(writenByteCount <= 0)
+     aFileEntry directoryBlock [BLOCKSIZE/128];
+         //   ={ {  .fileLength = -1, .startBlock = NULL, .exist = 'N', .filename="",.notUsed="" } };
+    for (int u=0;u<BLOCKSIZE/128;u++)
+    {
+        directoryBlock[u].exist='N';
+        strcpy( directoryBlock[u].filename,"");
+        directoryBlock[u].startBlock=NULL;
+        directoryBlock[u].fileLength =-1;
+        strcpy( directoryBlock[u].notUsed,"");
+    }
+    printf("%c\n",directoryBlock[4].exist);
+    /*  emptyEntry.fileLength=0;
+      emptyEntry.startBlock=NULL;
+      emptyEntry.filename="";
+      memcpy(emptyEntry.filename,    "", 0);*/
+    for (int t=0;t<7;t++){
+        //   writenByteCount=  write(mainFd,&emptyEntry, sizeof( aFileEntry));
+        if(write_block(directoryBlock,t+1) < 0)
         {  printf ("Error source:4  \n");
             return -1;
         }
     }
 
+
     // FAT init
-    for(int k=0;k<1024*128;k++){
-        long empS = NULL;
-        writenByteCount=  write(mainFd,&empS, sizeof(long));
-        if(writenByteCount <= 0)
+    long aFatBlock [BLOCKSIZE/8];
+    for (int u=0;u<(BLOCKSIZE/8);u++)
+    {
+        aFatBlock[u]=NULL;
+    }
+    for(int k=0;k<1024;k++){
+        if(write_block(aFatBlock,8+k) < 0)
         {  printf ("Error source:5  \n");
             return -1;
         }
     }
 
+    vdisk_fd =-1;
     if(-1==close(mainFd))
         return -1;
+
     return 0;
 }
 
@@ -165,7 +212,32 @@ int sfs_umount ()
 
 
 int sfs_create(char *filename)
-{
+{   //printf("afileentrysize:%d", sizeof(aFileEntry));
+     aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
+     for (int k =1;k<8;k++)
+     {
+         read_block(&(fileBlocks[k-1]),k);
+     }
+
+    int i=-1;
+    int y=-1;
+
+    for (i = 0; i < 7; i++) {
+           for (y =0; y<(BLOCKSIZE/ sizeof( aFileEntry));y++){
+                aFileEntry iter = fileBlocks[i][y];
+               if(iter.exist=='N')
+                   break;
+           }
+           if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
+               break;
+       }
+       printf("i:%d y:%d",i,y);
+        aFileEntry iter =  fileBlocks[i][y];
+       strcpy ( iter.filename,filename);
+       iter.exist='Y';
+       iter.fileLength=0;
+       write_block(fileBlocks[i],i+1); //1 comes from superblock
+
     return (0);
 }
 
