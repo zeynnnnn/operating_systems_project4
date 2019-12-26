@@ -45,23 +45,34 @@ int main()
     sfs_create ("file2.bin");
     sfs_create ("file3.bin");
     printf (" files created\n");
-/*
-    fd1 = sfs_open ("file1.bin", MODE_APPEND);
-    fd2 = sfs_open ("file2.bin", MODE_APPEND); 
-    for (i = 0; i < 10000; ++i) {
-	buffer[0] =   (char) 65;  
-	sfs_append (fd1, (void *) buffer, 1);
-    }
 
-    for (i = 0; i < 10000; ++i) {
-	buffer[0] = (char) 70;
-	buffer[1] = (char) 71;
-	buffer[2] = (char) 72;
-	buffer[3] = (char) 73;
-	sfs_append(fd2, (void *) buffer, 4);
-    }
-    
-    sfs_close(fd1); 
+    int fd3=99;
+    fd1 = sfs_open ("file1.bin", MODE_APPEND);
+    fd2 = sfs_open ("file2.bin", MODE_APPEND);
+    sfs_close(fd1);
+    fd3 = sfs_open ("file2.bin", MODE_READ);
+    printf("fd1: %d\n",fd1);
+
+    printf("fd2: %d\n",fd2);
+    printf("fd3: %d\n",fd3);
+
+    sfs_close(fd2);
+printf("FD2 size should be -1%d\nFD3 size should be 0%d\n",sfs_getsize(fd2),sfs_getsize(fd3));
+
+    /*   for (i = 0; i < 10000; ++i) {
+       buffer[0] =   (char) 65;
+       sfs_append (fd1, (void *) buffer, 1);
+       }
+
+       for (i = 0; i < 10000; ++i) {
+       buffer[0] = (char) 70;
+       buffer[1] = (char) 71;
+       buffer[2] = (char) 72;
+       buffer[3] = (char) 73;
+       sfs_append(fd2, (void *) buffer, 4);
+       }
+       */
+   /* sfs_close(fd1);
     sfs_close(fd2); 
 
     fd = sfs_open("file3.bin", MODE_APPEND);

@@ -243,18 +243,84 @@ int sfs_create(char *filename)
 }
 
 
-int sfs_open(char *file, int mode)
+int sfs_open(char *filename, int mode)
 {
-    return (0); 
+    aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
+    for (int k =1;k<8;k++)
+    {
+        read_block(&fileBlocks[k-1],k);
+    }
+
+    int i=-1;
+    int y=-1;
+
+    for (i = 0; i < 7; i++) {
+        for (y =0; y<(BLOCKSIZE/ sizeof( aFileEntry));y++){
+            aFileEntry iter = fileBlocks[i][y];
+            if(strcmp(iter.filename,filename))
+                break;
+        }
+        if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
+            break;
+    }
+    printf("i:%d y:%d",i,y);
+    if (i>=7)
+        return -1;
+    aFileEntry * actualFileInfoLocation ;
+    actualFileInfoLocation=& fileBlocks[i][y];
+    char superblock[BLOCKSIZE];
+    if (read_block(&superblock,0)==-1)
+        return -1;
+    int k=-1;
+
+    for (k =0;k<10;k++)
+    {
+        aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ k* sizeof(aOpenFileEntry)+ sizeof(int))  ;
+        printf("Char at the beginning of iter :%c \n",iter->exist);
+        if (iter->exist=='N') {
+            iter->exist='F';
+            iter->mode=mode;
+            iter->openFilePointer=actualFileInfoLocation;
+            printf("After updated Char at the beginning of iter :%c \nMode: %d \n Actual Pointer :%lu",iter->exist,iter->mode,iter->openFilePointer);
+           if( -1==write_block(superblock,0))
+               return -1;
+            return k;
+        }
+    }
+    return (-1);
 }
 
 int sfs_close(int fd){
-    return (0); 
+    char superblock[BLOCKSIZE];
+    if (read_block(&superblock,0)==-1)
+        return -1;
+        aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry)+ sizeof(int))  ;
+        printf("Char at the beginning of iter :%c \n",iter->exist);
+        if (iter->exist=='F') {
+            iter->exist='N';
+            iter->mode=-1;
+            iter->openFilePointer=NULL;
+            printf("After updated Char at the beginning of iter :%c \nMode: %d \n Actual Pointer :%lu",iter->exist,iter->mode,iter->openFilePointer);
+            if( -1==write_block(superblock,0))
+                return -1;
+            return 0;
+        }
+
+    return (-1);
 }
 
 int sfs_getsize (int  fd)
 {
-    return (0); 
+    char superblock[BLOCKSIZE];
+    if (read_block(&superblock,0)==-1)
+        return -1;
+    aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry)+ sizeof(int))  ;
+    printf("Char at the beginning of iter :%c \n",iter->exist);
+    if (iter->exist=='F') {
+       if( iter->openFilePointer!=NULL)
+           return (  (aFileEntry*) ( iter->openFilePointer))->fileLength;
+    }
+    return (-1);
 }
 
 int sfs_read(int fd, void *buf, int n){
