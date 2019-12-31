@@ -50,7 +50,7 @@ int main()
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
     sfs_close(fd1);
-    fd3 = sfs_open ("file2.bin", MODE_READ);
+    fd3 = sfs_open ("file2.bin", MODE_APPEND);
     printf("fd1: %d\n",fd1);
 
     printf("fd2: %d\n",fd2);
@@ -59,11 +59,17 @@ int main()
     sfs_close(fd2);
 printf("FD2 size should be -1%d\nFD3 size should be 0%d\n",sfs_getsize(fd2),sfs_getsize(fd3));
 
-    /*   for (i = 0; i < 10000; ++i) {
+       for (i = 0; i < 4; ++i) {
        buffer[0] =   (char) 65;
-       sfs_append (fd1, (void *) buffer, 1);
+       sfs_append (fd3, (void *) buffer, 1);
        }
-
+       buffer[0]='k';
+    for (i = 0; i < 10; ++i) {
+        sfs_read (fd3, (void *) buffer, 1);
+        c = (char) buffer[0];
+        printf("C:%c\n",c);
+    }
+/*
        for (i = 0; i < 10000; ++i) {
        buffer[0] = (char) 70;
        buffer[1] = (char) 71;
@@ -71,7 +77,7 @@ printf("FD2 size should be -1%d\nFD3 size should be 0%d\n",sfs_getsize(fd2),sfs_
        buffer[3] = (char) 73;
        sfs_append(fd2, (void *) buffer, 4);
        }
-       */
+
    /* sfs_close(fd1);
     sfs_close(fd2); 
 

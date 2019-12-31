@@ -12,6 +12,8 @@ int create_vdisk (char *vdiskname, int m);
    Size will be 2^m bytes. If success, 0 will returned; if error, -1
    will be returned. 
 */
+void updateFileInfos( int n,int , long k);
+void readFileInfos( int n,int*, long *k);
 
 int sfs_format (char *vdiskname);
 /*
