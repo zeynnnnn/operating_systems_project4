@@ -13,7 +13,9 @@ int create_vdisk (char *vdiskname, int m);
    will be returned. 
 */
 void updateFileInfos( int n,int , long k);
-void readFileInfos( int n,int*, long *k);
+void readFileInfos( int n,int*, long *k, char* exists);
+void updateFatInfos(long blockno,long newValue);
+long findNextBlockFromFat(long startBlock);
 
 int sfs_format (char *vdiskname);
 /*

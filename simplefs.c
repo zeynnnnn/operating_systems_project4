@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+
 #include "simplefs.h"
 
 int vdisk_fd; // global virtual disk file descriptor
@@ -330,7 +331,8 @@ int sfs_getsize (int  fd)
        {
            int l=-99;
            long st;
-           readFileInfos(iter->openFilePointer,&l,&st);
+           char exist;
+           readFileInfos(iter->openFilePointer,&l,&st,&exist);
            return l;
        }
     }
@@ -338,6 +340,7 @@ int sfs_getsize (int  fd)
 }
 
 int sfs_read(int fd, void *buf, int n){
+
     char superblock[BLOCKSIZE];
     int result =read_block(&superblock,0);
     if (result !=0)
@@ -347,32 +350,45 @@ int sfs_read(int fd, void *buf, int n){
     if (iter->exist=='F') {
         if( iter->openFilePointer!=-1.0){
             long startPointer;
-            int length =99;
-            readFileInfos(iter->openFilePointer,&length,&startPointer);
-           int maxIndex =ceil(length/BLOCKSIZE);
-           int wantedByteIndex= ceil( n/BLOCKSIZE );
+            int length =-1;
+            char exist;
+            readFileInfos(iter->openFilePointer,&length,&startPointer,&exist);
+            if(length<n)
+            {
+                printf("n is bigger than File Size!");
+                return -1;
+            }
+            double value=length;
+            double divider=BLOCKSIZE;
+            double result =value/divider;
+           double maxIndex2 =ceil(result);
+           int maxIndex=maxIndex2;
+            double number =(double)n;
+
+            result =number/divider;
+            double wantedByteIndex2= ceil(result );
+           int wantedByteIndex=wantedByteIndex2;
            int t=0;
            int counter=0;
            while( (startPointer!=-1.0)&&(counter<=maxIndex)) {
 
                counter++;
-               void * dataBlockNumber = (char*)(startPointer/(BLOCKSIZE/ sizeof(long)))  +1024+ 8;
-               if (counter -1 == wantedByteIndex) {
+               int dataBlockNumber = startPointer +1024+ 8;
+               if (counter  == wantedByteIndex) {
                    char lastBlock[BLOCKSIZE];
                    read_block(&lastBlock, dataBlockNumber);
                    for (t = 0; t < (n % BLOCKSIZE); t++) {
-                       *(char *)( buf + t + (counter - 1) * BLOCKSIZE) = lastBlock[t];
+                       char* pointerIterInBuf=((char *) buf + t + ((counter - 1) * BLOCKSIZE));
+                       *(pointerIterInBuf) = lastBlock[t];
                    }
+                   printf(" after change: %s", (char*)buf );
                    break;
                }
-              read_block((char *) buf + BLOCKSIZE * counter, dataBlockNumber);
+               printf("BURDAAAA: %c",*((char *) buf + BLOCKSIZE * counter));
+              read_block(((char *) buf + BLOCKSIZE * counter), dataBlockNumber);
+               printf("sONRA:%c",*((char *) buf + BLOCKSIZE * counter));
 
-               long lastNotNullStartBlockNo =NULL;
-               long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
-               int aimedblockno= 8+startPointer/(BLOCKSIZE/ sizeof(long));
-               read_block(&fatBlockfromRead,aimedblockno);
-              // lastNotNullStartBlockNo= startPointer;
-               startPointer =fatBlockfromRead[ startPointer%(BLOCKSIZE/ sizeof(long))];
+               startPointer= findNextBlockFromFat( startPointer);
 
            }
             return ( counter-1)*BLOCKSIZE+t;
@@ -385,6 +401,24 @@ int sfs_read(int fd, void *buf, int n){
 
 }
 long  nextEmptyFinder(){
+    long starterBlocks[56];
+    for (int j = 0; j <56 ; j++) {
+        starterBlocks[j]=-1.0;
+    }
+    int length=-3;
+    long start;
+    char exist;
+    int counter =0;
+    for (int i = 0; i < 56; ++i) {
+        readFileInfos(i,&length,&start,&exist);
+        if (exist=='F')
+        {
+            starterBlocks[counter]=start;
+            counter++;
+        }
+
+    }
+
     long FatBlock [BLOCKSIZE/ sizeof(long)];
     for (int u=0;u<(BLOCKSIZE/ sizeof(long));u++)
     {
@@ -400,7 +434,16 @@ long  nextEmptyFinder(){
             {
                if( FatBlock[m] ==-1.0 )
                {
+                   int boolForBlockNumIsTaken=0;
                    long num =(k*(BLOCKSIZE/ sizeof(long)))+m;
+                   for (int t=0;t<counter;t++)
+                       if(num==starterBlocks[t])
+                       {
+                            boolForBlockNumIsTaken=1;
+                           break;
+                       }
+
+                if(boolForBlockNumIsTaken==0)
                    return num;
                }
             }
@@ -423,7 +466,8 @@ int sfs_append(int fd, void *buf, int n)
         if( iter->openFilePointer!=-1.0){
             long startBlockNo;
             int length ;
-            readFileInfos(iter->openFilePointer,&length,&startBlockNo);
+            char exist;
+            readFileInfos(iter->openFilePointer,&length,&startBlockNo,&exist);
 
             // if there were no startblock at the beginning
             if( (startBlockNo==-1.0)&&(n>0))
@@ -432,19 +476,19 @@ int sfs_append(int fd, void *buf, int n)
                 updateFileInfos(iter->openFilePointer,0,emptyFATEntry);
                 startBlockNo =emptyFATEntry;
             }
+            printf("fd's lenght :%d \n\n",length);
+            printf("fd's aopenfileentry startblock :%lu \n",startBlockNo);
             int iterLen =length;
-            long lastNotNullStartBlockNo =NULL;
+          //  long lastNotNullStartBlockNo =NULL;
             long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
-            while ((startBlockNo!=-1.0)&& (iterLen>BLOCKSIZE)) { //iterate used blocks
-                int aimedblockno= 8+startBlockNo/(BLOCKSIZE/ sizeof(long));
-                read_block(&fatBlockfromRead,aimedblockno);
-                lastNotNullStartBlockNo= startBlockNo;
+            //iterate used blocks
+            while ((startBlockNo!=-1.0)&& (iterLen>BLOCKSIZE)) {
                 iterLen=iterLen-BLOCKSIZE;
-                startBlockNo =fatBlockfromRead[ startBlockNo%(BLOCKSIZE/ sizeof(long))];
+                startBlockNo= findNextBlockFromFat( startBlockNo);
             }
 
             printf("fd's aopenfileentry startblock :%lu \n",startBlockNo);
-            printf("fd's lenght :%d \n",length);
+
 
             int notWrittenByteNumber=n;
 //readFileInfos(iter->openFilePointer,&length,&startBlockNo);
@@ -452,27 +496,25 @@ int sfs_append(int fd, void *buf, int n)
             int counter=0;
           char halfBlock[BLOCKSIZE];
             int  halfFullSize= length%BLOCKSIZE;
-            if(halfFullSize!=0)
-                read_block(&halfBlock, startBlockNo +8 +1024);
-            int y=-1;
-            for(y=0;(y<BLOCKSIZE-halfFullSize)&&(notWrittenByteNumber>0);y++)
-            {
-                halfBlock[halfFullSize+y]=*((char*)buf+y);
-                notWrittenByteNumber=notWrittenByteNumber-1;
+            if((halfFullSize!=0) ||(length==0)){
+                read_block(&halfBlock, (int)startBlockNo +8 +1024);
+                int y=-1;
+                for(y=0;(y<BLOCKSIZE-halfFullSize)&&(notWrittenByteNumber>0);y++)
+                {
+                    halfBlock[halfFullSize+y]=*((char*)buf+y);
+                    notWrittenByteNumber=notWrittenByteNumber-1;
+                }
+                write_block(halfBlock,(int)startBlockNo+8+1024);
             }
-            write_block(halfBlock,startBlockNo+8+1024);
 
            while (notWrittenByteNumber>0)
            {
                long emptyFATEntry= nextEmptyFinder();
                if(-1== emptyFATEntry)
                    return -1;
-               *(long*)startBlockNo= emptyFATEntry;
+               updateFatInfos(startBlockNo,emptyFATEntry);
+               startBlockNo= emptyFATEntry;
 
-               int aimedblockno= 8+startBlockNo/(BLOCKSIZE/ sizeof(long));
-               read_block(&fatBlockfromRead,aimedblockno);
-               *(long*) fatBlockfromRead[ startBlockNo%(BLOCKSIZE/ sizeof(long))]=emptyFATEntry;
-               write_block(fatBlockfromRead,aimedblockno);
 
                void *dataBlockNumber = startBlockNo+8+1024;
                counter++;
@@ -487,17 +529,11 @@ int sfs_append(int fd, void *buf, int n)
                write_block((char *) buf + BLOCKSIZE * counter, dataBlockNumber);
                notWrittenByteNumber=notWrittenByteNumber-BLOCKSIZE;
 
-               aimedblockno= 8+startBlockNo/(BLOCKSIZE/ sizeof(long));
-               read_block(&fatBlockfromRead,aimedblockno);
-               *(long*) fatBlockfromRead[ startBlockNo%(BLOCKSIZE/ sizeof(long))]=emptyFATEntry;
-               write_block(fatBlockfromRead,aimedblockno);
            }
 
             //update file length
             long k =-1.0;
            updateFileInfos(iter->openFilePointer,n,k);
-
-           //update fat
 
 
             return counter*BLOCKSIZE+t;
@@ -512,7 +548,13 @@ int sfs_append(int fd, void *buf, int n)
     return (-1);
 
 }
-
+void updateFatInfos(long blockno,long newValue){
+    long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
+    int aimedblockno= 8+blockno/(BLOCKSIZE/ sizeof(long));
+    read_block(&fatBlockfromRead,aimedblockno);
+    fatBlockfromRead[ (blockno%(BLOCKSIZE/ sizeof(long)))]=newValue;
+    write_block(fatBlockfromRead,aimedblockno);
+}
 
 void updateFileInfos(int blockno,int length,long startnewBlock)
 {
@@ -528,7 +570,7 @@ void updateFileInfos(int blockno,int length,long startnewBlock)
     write_block(blackfat,1+blockno/(BLOCKSIZE/ sizeof(aFileEntry)));
 
 }
-void readFileInfos(int blockno,int* length,long *startnewBlock)
+void readFileInfos(int blockno,int* length,long *startnewBlock, char*exists)
 {
     aFileEntry blackfat[BLOCKSIZE/ sizeof(aFileEntry)];
     int aimedblockno= blockno/(BLOCKSIZE/ sizeof(aFileEntry));
@@ -536,8 +578,19 @@ void readFileInfos(int blockno,int* length,long *startnewBlock)
     aFileEntry aFileEntry1=(blackfat[ (blockno)%(BLOCKSIZE/ sizeof(aFileEntry))]);
     *startnewBlock=aFileEntry1.startBlock;
     *length= aFileEntry1.fileLength;
+    *exists =aFileEntry1.exist;
 
 }
+long findNextBlockFromFat(long startBlock){
+    long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
+    int aimedblockno= 8+startBlock/(BLOCKSIZE/ sizeof(long));
+    read_block(&fatBlockfromRead,aimedblockno);
+    long nextBlock =fatBlockfromRead[ startBlock%(BLOCKSIZE/ sizeof(long))];
+    return nextBlock;
+}
+
+
+
 int sfs_delete(char *filename)
 {
     return (0); 

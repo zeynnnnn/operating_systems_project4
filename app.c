@@ -11,7 +11,7 @@ int main()
     int ret;
     int fd1, fd2, fd; 
     int i; 
-    char buffer[1024];
+    char buffer[4000];
     char buffer2[8] = {50, 50, 50, 50, 50, 50, 50, 50};
     int size;
     char c; 
@@ -59,15 +59,15 @@ int main()
     sfs_close(fd2);
 printf("FD2 size should be -1%d\nFD3 size should be 0%d\n",sfs_getsize(fd2),sfs_getsize(fd3));
 
-       for (i = 0; i < 4; ++i) {
+       for (i = 0; i < 2000;++i) {
        buffer[0] =   (char) 65;
        sfs_append (fd3, (void *) buffer, 1);
        }
        buffer[0]='k';
-    for (i = 0; i < 10; ++i) {
-        sfs_read (fd3, (void *) buffer, 1);
-        c = (char) buffer[0];
-        printf("C:%c\n",c);
+    for (i = 0; i < 1; ++i) {
+        sfs_read (fd3, (void *) buffer, 20);
+        char* str = (char*) buffer;
+        printf("C:%s\n",str);
     }
 /*
        for (i = 0; i < 10000; ++i) {
