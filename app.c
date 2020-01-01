@@ -11,7 +11,7 @@ int main()
     int ret;
     int fd1, fd2, fd;
     int i;
-    char buffer[1024];
+    char buffer[2000];
     char buffer2[8] = {50, 50, 50, 50, 50, 50, 50, 50};
     int size;
     char c;
@@ -61,6 +61,16 @@ int main()
 
     sfs_close(fd1);
 
+
+    fd = sfs_open("file1.bin", MODE_READ);
+    size = sfs_getsize (fd);
+    for (i = 0; i < size; ++i) {
+        sfs_read (fd, (void *) buffer, 1);
+        c = (char) buffer[0];
+        printf("%c",c);
+    }
+    sfs_close (fd);
+
     sfs_close(fd2);
 
     fd = sfs_open("file3.bin", MODE_APPEND);
@@ -90,14 +100,14 @@ int main()
         printf("%c",c);
     }
     sfs_close (fd);
-/*
+
 
     fd = sfs_open("file1.bin", MODE_READ);
     size = sfs_getsize (fd);
     sfs_read (fd, (void *) buffer, size);
     char * str = buffer;
     printf("%s",str);
-    sfs_close (fd);*/
+    sfs_close (fd);
 
     ret = sfs_umount();
 }
