@@ -12,11 +12,11 @@ int create_vdisk (char *vdiskname, int m);
    Size will be 2^m bytes. If success, 0 will returned; if error, -1
    will be returned. 
 */
-void updateFileInfos( int n,int , long k);
-void readFileInfos( int n,int*, long *k, char* exists);
-void updateFatInfos(long blockno,long newValue);
-long findNextBlockFromFat(long startBlock);
-
+void updateFileInfos( int n,int , int k);
+void readFileInfos( int n,int*, int *k, char* exists);
+void updateFatInfos(int blockno,int newValue, int);
+int findNextBlockFromFat(int startBlock);
+void updateFatChar(int blockno,char used);
 int sfs_format (char *vdiskname);
 /*
   This function will be used to initialize/create 

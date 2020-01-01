@@ -21,16 +21,21 @@ int size;
 typedef struct  {
     char exist;
     int mode;
-    long openFilePointer;
+    int openFilePointer;
 } aOpenFileEntry;
 
 typedef struct {
     int fileLength;
-    long startBlock;
+    int startBlock;
     char exist;
     char filename[32];
-    char notUsed [78];
+    char notUsed [86];
 }aFileEntry ;
+
+typedef struct {
+    int nextFat;
+    char used;
+}aFatEntry;
 
 // This function is simply used to a create a virtual disk
 // (a simple Linux file including all zeros) of the specified size.
@@ -40,6 +45,7 @@ typedef struct {
 // size = 2^m Bytes
 int create_vdisk (char *vdiskfilename, int m)
 {
+    printf("SIZE OF AFATENTRY:%d,afileentry%d, aopenfileEntry%d", sizeof(aFatEntry), sizeof(aFileEntry), sizeof(aOpenFileEntry));
     char command[BLOCKSIZE];
     int num = 1;
     int count; 
@@ -115,8 +121,8 @@ int sfs_format (char *vdiskname)
         superblock[j]='k';
     }
    // *(int*)superblock= size;
-     aOpenFileEntry emptyOpenFile = {'N',-1,-1.0};
-    long k =-1.0;
+     aOpenFileEntry emptyOpenFile = {'N',-1,-1};
+    int k =-1;
     emptyOpenFile.openFilePointer= k;
    // printf("exist: %c \n",emptyOpenFile.exist);
     for (int i = 0; i < 10; i++) {
@@ -162,16 +168,13 @@ int sfs_format (char *vdiskname)
     {
         directoryBlock[u].exist='N';
         strcpy( directoryBlock[u].filename,"");
-        long k =-1.0;
+        int k =-1;
         directoryBlock[u].startBlock=k;
         directoryBlock[u].fileLength =-1;
         strcpy( directoryBlock[u].notUsed,"");
     }
     printf("%c\n",directoryBlock[4].exist);
-    /*  emptyEntry.fileLength=0;
-      emptyEntry.startBlock=NULL;
-      emptyEntry.filename="";
-      memcpy(emptyEntry.filename,    "", 0);*/
+
     for (int t=0;t<7;t++){
         //   writenByteCount=  write(mainFd,&emptyEntry, sizeof( aFileEntry));
         if(write_block(directoryBlock,t+1) != 0)
@@ -182,14 +185,16 @@ int sfs_format (char *vdiskname)
 
 
     // FAT init
-    long aFatBlock [BLOCKSIZE/8];
+    aFatEntry aFatBlock [sizeof(aFatEntry)];
     for (int u=0;u<(BLOCKSIZE/8);u++)
     {
-        aFatBlock[u]=-1.0;
+        aFatBlock[u].used='N';
+        aFatBlock[u].nextFat=-1;
     }
     for(int k=0;k<1024;k++){
         if(write_block(aFatBlock,8+k) < 0)
-        {  printf ("Error source:5  \n");
+        {
+            printf ("Error source:5  \n");
             return -1;
         }
     }
@@ -219,7 +224,8 @@ int sfs_umount ()
 
 
 int sfs_create(char *filename)
-{   //printf("afileentrysize:%d", sizeof(aFileEntry));
+{
+    //printf("afileentrysize:%d", sizeof(aFileEntry));
      aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
      for (int k =1;k<8;k++)
      {
@@ -243,6 +249,8 @@ int sfs_create(char *filename)
         iter=& fileBlocks[i][y];
        strcpy ( iter->filename,filename);
        iter->exist='F';
+       iter->startBlock=-1;
+        strcpy ( iter->notUsed,"filename");
        iter->fileLength=0;
        write_block(fileBlocks[i],i+1); //1 comes from superblock
 
@@ -264,8 +272,13 @@ int sfs_open(char *filename, int mode)
     for (i = 0; i < 7; i++) {
         for (y =0; y<(BLOCKSIZE/ sizeof( aFileEntry));y++){
             aFileEntry iter = fileBlocks[i][y];
-            if(strcmp(iter.filename,filename))
+
+            if(strcmp(iter.filename,filename) == 0)
+            {
+                printf("\n\nOPENED:::::%s\n",iter.filename);
                 break;
+            }
+
         }
         if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
             break;
@@ -273,7 +286,7 @@ int sfs_open(char *filename, int mode)
     printf("i:%d y:%d",i,y);
     if (i>=7)
         return -1;
-    long actualFileInfoLocation ;
+    int actualFileInfoLocation ;
     actualFileInfoLocation=(BLOCKSIZE/ sizeof(aFileEntry))*i+y;
     char superblock[BLOCKSIZE];
     if (read_block(&superblock,0)==-1)
@@ -291,7 +304,7 @@ int sfs_open(char *filename, int mode)
             iter->openFilePointer=actualFileInfoLocation;
 
             aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ k* sizeof(aOpenFileEntry))  ;
-            printf("After updated Char at the beginning of iter :%c \nMode: %d \n Actual Pointer :%lu",iter->exist,iter->mode,iter->openFilePointer);
+            printf("open Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
            if( -1==write_block(superblock,0))
                return -1;
             return k;
@@ -305,12 +318,12 @@ int sfs_close(int fd){
     if (read_block(&superblock,0)==-1)
         return -1;
         aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry))  ;
-        printf("Char at the beginning of iter :%c \n",iter->exist);
+    printf("Close Called BEFORE:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
         if (iter->exist=='F') {
             iter->exist='N';
             iter->mode=-1;
-            iter->openFilePointer=-1.0;
-            printf("After updated Char at the beginning of iter :%c \nMode: %d \n Actual Pointer :%lu",iter->exist,iter->mode,iter->openFilePointer);
+            iter->openFilePointer=-1;
+            printf("Close Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
             if( -1==write_block(superblock,0))
                 return -1;
             return 0;
@@ -327,10 +340,10 @@ int sfs_getsize (int  fd)
     aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry))  ;
     printf("Char at the beginning of iter :%c \n",iter->exist);
     if (iter->exist=='F') {
-       if( iter->openFilePointer!=-1.0)
+       if( iter->openFilePointer!=-1)
        {
            int l=-99;
-           long st;
+           int st;
            char exist;
            readFileInfos(iter->openFilePointer,&l,&st,&exist);
            return l;
@@ -348,8 +361,13 @@ int sfs_read(int fd, void *buf, int n){
     aOpenFileEntry * iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry) ) ;
   //  printf("Char at the beginning of iter :%c \n",iter->exist);
     if (iter->exist=='F') {
-        if( iter->openFilePointer!=-1.0){
-            long startPointer;
+        if (iter->mode!=MODE_READ)
+        {
+            printf("Mode is not suited for reading operation!");
+            return -1;
+        }
+        if( iter->openFilePointer!=-1){
+            int startPointer;
             int length =-1;
             char exist;
             readFileInfos(iter->openFilePointer,&length,&startPointer,&exist);
@@ -370,7 +388,7 @@ int sfs_read(int fd, void *buf, int n){
            int wantedByteIndex=wantedByteIndex2;
            int t=0;
            int counter=0;
-           while( (startPointer!=-1.0)&&(counter<=maxIndex)) {
+           while( (startPointer!=-1)&&(counter<=maxIndex)) {
 
                counter++;
                int dataBlockNumber = startPointer +1024+ 8;
@@ -381,12 +399,12 @@ int sfs_read(int fd, void *buf, int n){
                        char* pointerIterInBuf=((char *) buf + t + ((counter - 1) * BLOCKSIZE));
                        *(pointerIterInBuf) = lastBlock[t];
                    }
-                   printf(" after change: %s", (char*)buf );
+                 //  printf(" after change: %s\n", (char*)buf );
                    break;
                }
-               printf("BURDAAAA: %c",*((char *) buf + BLOCKSIZE * counter));
+               printf("BURDAAAA: %c\n",*((char *) buf + BLOCKSIZE * counter));
               read_block(((char *) buf + BLOCKSIZE * counter), dataBlockNumber);
-               printf("sONRA:%c",*((char *) buf + BLOCKSIZE * counter));
+               printf("SONRA:%c\n",*((char *) buf + BLOCKSIZE * counter));
 
                startPointer= findNextBlockFromFat( startPointer);
 
@@ -400,50 +418,25 @@ int sfs_read(int fd, void *buf, int n){
     return (-1);
 
 }
-long  nextEmptyFinder(){
-    long starterBlocks[56];
-    for (int j = 0; j <56 ; j++) {
-        starterBlocks[j]=-1.0;
-    }
-    int length=-3;
-    long start;
-    char exist;
-    int counter =0;
-    for (int i = 0; i < 56; ++i) {
-        readFileInfos(i,&length,&start,&exist);
-        if (exist=='F')
-        {
-            starterBlocks[counter]=start;
-            counter++;
-        }
+int  nextEmptyFinder(){
 
-    }
-
-    long FatBlock [BLOCKSIZE/ sizeof(long)];
-    for (int u=0;u<(BLOCKSIZE/ sizeof(long));u++)
+    aFatEntry FatBlock [BLOCKSIZE/ sizeof(aFatEntry)];
+    for (int u=0;u<(BLOCKSIZE/ sizeof(aFatEntry));u++)
     {
-        long m =-1.0;
-        FatBlock[u]=m;
+        FatBlock[u].nextFat =-1;
+        FatBlock[u].used='H';
     }
     for(int k=0;k<1024;k++) {
         if (read_block(&FatBlock, 8 + k) < 0) {
             return -1;
         } else
         {
-            for(int m=0;m<(BLOCKSIZE/ sizeof(long));m++)
+            for(int m=0;m<(BLOCKSIZE/ sizeof(aFatEntry));m++)
             {
-               if( FatBlock[m] ==-1.0 )
+                aFatEntry iter =FatBlock[m];
+               if( iter.used =='N' )
                {
-                   int boolForBlockNumIsTaken=0;
-                   long num =(k*(BLOCKSIZE/ sizeof(long)))+m;
-                   for (int t=0;t<counter;t++)
-                       if(num==starterBlocks[t])
-                       {
-                            boolForBlockNumIsTaken=1;
-                           break;
-                       }
-
-                if(boolForBlockNumIsTaken==0)
+                   int num =(k*(BLOCKSIZE/ sizeof(aFatEntry)))+m;
                    return num;
                }
             }
@@ -463,31 +456,31 @@ int sfs_append(int fd, void *buf, int n)
     if (iter->exist=='F') {
         if (iter->mode==MODE_APPEND){
         printf("fd's aopenfileentry status :%c \n",iter->exist);
-        if( iter->openFilePointer!=-1.0){
-            long startBlockNo;
+        if( iter->openFilePointer!=-1){
+            int startBlockNo;
             int length ;
             char exist;
             readFileInfos(iter->openFilePointer,&length,&startBlockNo,&exist);
 
             // if there were no startblock at the beginning
-            if( (startBlockNo==-1.0)&&(n>0))
+            if( (startBlockNo==-1)&&(n>0))
             {
-                long emptyFATEntry=  nextEmptyFinder();
+                int emptyFATEntry=  nextEmptyFinder();
                 updateFileInfos(iter->openFilePointer,0,emptyFATEntry);
                 startBlockNo =emptyFATEntry;
             }
             printf("fd's lenght :%d \n\n",length);
-            printf("fd's aopenfileentry startblock :%lu \n",startBlockNo);
+            printf("fd's aopenfileentry startblock :%d \n",startBlockNo);
             int iterLen =length;
           //  long lastNotNullStartBlockNo =NULL;
-            long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
+
             //iterate used blocks
-            while ((startBlockNo!=-1.0)&& (iterLen>BLOCKSIZE)) {
+            while ((startBlockNo!=-1)&& (iterLen>BLOCKSIZE)) {
                 iterLen=iterLen-BLOCKSIZE;
                 startBlockNo= findNextBlockFromFat( startBlockNo);
             }
 
-            printf("fd's aopenfileentry startblock :%lu \n",startBlockNo);
+            printf("fd's aopenfileentry startblock :%d \n",startBlockNo);
 
 
             int notWrittenByteNumber=n;
@@ -509,14 +502,12 @@ int sfs_append(int fd, void *buf, int n)
 
            while (notWrittenByteNumber>0)
            {
-               long emptyFATEntry= nextEmptyFinder();
+               int emptyFATEntry= nextEmptyFinder();
                if(-1== emptyFATEntry)
                    return -1;
-               updateFatInfos(startBlockNo,emptyFATEntry);
+               updateFatInfos(startBlockNo,emptyFATEntry,0);
                startBlockNo= emptyFATEntry;
-
-
-               void *dataBlockNumber = startBlockNo+8+1024;
+               int dataBlockNumber = startBlockNo+8+1024;
                counter++;
                if (notWrittenByteNumber <=BLOCKSIZE) {
                    char lastBlock[BLOCKSIZE];
@@ -532,8 +523,8 @@ int sfs_append(int fd, void *buf, int n)
            }
 
             //update file length
-            long k =-1.0;
-           updateFileInfos(iter->openFilePointer,n,k);
+
+           updateFileInfos(iter->openFilePointer,n,-1);
 
 
             return counter*BLOCKSIZE+t;
@@ -548,29 +539,47 @@ int sfs_append(int fd, void *buf, int n)
     return (-1);
 
 }
-void updateFatInfos(long blockno,long newValue){
-    long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
-    int aimedblockno= 8+blockno/(BLOCKSIZE/ sizeof(long));
+void updateFatInfos(int blockno,int newValue,int blockNoEmptied){
+    aFatEntry fatBlockfromRead[BLOCKSIZE/ sizeof(aFatEntry)];
+    int aimedblockno;
+    if(blockNoEmptied==1)
+        updateFatChar(blockno,'N');
+    else
+        updateFatChar(newValue,'Y');
+    if(blockno!=-1){
+        aimedblockno= 8+blockno/(BLOCKSIZE/ sizeof(aFatEntry));
+        read_block(&fatBlockfromRead,aimedblockno);
+        fatBlockfromRead[ (blockno%(BLOCKSIZE/ sizeof(aFatEntry)))].nextFat=newValue;
+        write_block(fatBlockfromRead,aimedblockno);
+    }
+
+}
+void updateFatChar(int blockno,char used){
+    aFatEntry fatBlockfromRead[BLOCKSIZE/ sizeof(aFatEntry)];
+    int aimedblockno;
+    aimedblockno= 8+blockno/(BLOCKSIZE/ sizeof(aFatEntry));
     read_block(&fatBlockfromRead,aimedblockno);
-    fatBlockfromRead[ (blockno%(BLOCKSIZE/ sizeof(long)))]=newValue;
-    write_block(fatBlockfromRead,aimedblockno);
+
+    (fatBlockfromRead[ (blockno)%(BLOCKSIZE/ sizeof(aFatEntry))]).used=used;
+    write_block(fatBlockfromRead,8+blockno/(BLOCKSIZE/ sizeof(aFatEntry)));
 }
 
-void updateFileInfos(int blockno,int length,long startnewBlock)
+void updateFileInfos(int blockno,int length,int startnewBlock)
 {
     aFileEntry blackfat[BLOCKSIZE/ sizeof(aFileEntry)];
     int aimedblockno= blockno/(BLOCKSIZE/ sizeof(aFileEntry));
     read_block(&blackfat,aimedblockno+1);
-    if(startnewBlock!=-1.0){
+    if(startnewBlock!=-1){
        printf("girdi");
         ( blackfat[ (blockno%(BLOCKSIZE/ sizeof(aFileEntry)))]).startBlock=startnewBlock;
+        updateFatInfos(-1,startnewBlock,0);
     }
 
     (blackfat[ (blockno)%(BLOCKSIZE/ sizeof(aFileEntry))]).fileLength+=length;
     write_block(blackfat,1+blockno/(BLOCKSIZE/ sizeof(aFileEntry)));
 
 }
-void readFileInfos(int blockno,int* length,long *startnewBlock, char*exists)
+void readFileInfos(int blockno,int* length,int *startnewBlock, char*exists)
 {
     aFileEntry blackfat[BLOCKSIZE/ sizeof(aFileEntry)];
     int aimedblockno= blockno/(BLOCKSIZE/ sizeof(aFileEntry));
@@ -581,11 +590,12 @@ void readFileInfos(int blockno,int* length,long *startnewBlock, char*exists)
     *exists =aFileEntry1.exist;
 
 }
-long findNextBlockFromFat(long startBlock){
-    long fatBlockfromRead[BLOCKSIZE/ sizeof(long)];
-    int aimedblockno= 8+startBlock/(BLOCKSIZE/ sizeof(long));
+int findNextBlockFromFat(int startBlock){
+
+    aFatEntry fatBlockfromRead[BLOCKSIZE/ sizeof(aFatEntry)];
+    int aimedblockno= 8+startBlock/(BLOCKSIZE/ sizeof(aFatEntry));
     read_block(&fatBlockfromRead,aimedblockno);
-    long nextBlock =fatBlockfromRead[ startBlock%(BLOCKSIZE/ sizeof(long))];
+    int nextBlock =fatBlockfromRead[ startBlock%(BLOCKSIZE/ sizeof(aFatEntry))].nextFat;
     return nextBlock;
 }
 
@@ -593,5 +603,37 @@ long findNextBlockFromFat(long startBlock){
 
 int sfs_delete(char *filename)
 {
-    return (0); 
+    aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
+    for (int k =1;k<8;k++)
+    {
+        read_block(&fileBlocks[k-1],k);
+    }
+
+    int i=-1;
+    int y=-1;
+
+    for (i = 0; i < 7; i++) {
+        for (y =0; y<(BLOCKSIZE/ sizeof( aFileEntry));y++){
+            aFileEntry iter = fileBlocks[i][y];
+            if(strcmp(iter.filename,filename) == 0)
+                break;
+        }
+        if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
+            break;
+    }
+    printf("i:%d y:%d",i,y);
+    aFileEntry * iter ;
+    iter=& fileBlocks[i][y];
+    iter->exist='N';
+    iter->fileLength=-1;
+    int iterBlock =iter->startBlock;
+    int iterBlock2=-2;
+    while (iterBlock2!=-1)
+    {
+        iterBlock2=findNextBlockFromFat(iterBlock);
+        updateFatInfos(iterBlock,-1,1);
+    }
+    write_block(fileBlocks[i],i+1); //1 comes from superblock
+
+    return (0);
 }

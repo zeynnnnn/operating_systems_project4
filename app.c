@@ -9,94 +9,76 @@
 int main()
 {
     int ret;
-    int fd1, fd2, fd; 
-    int i; 
-    char buffer[4000];
+    int fd1, fd2, fd;
+    int i;
+    char buffer[1024];
     char buffer2[8] = {50, 50, 50, 50, 50, 50, 50, 50};
     int size;
-    char c; 
+    char c;
 
-    printf ("started\n"); 
-    
+    printf ("started\n");
+
     // ****************************************************
     // if this is the first running of app, we can
     // create a virtual disk and format it as below
     ret  = create_vdisk (DISKNAME, 24); // size = 16 MB
     if (ret != 0) {
-	printf ("there was an error in creating the disk\n");
-	exit(1); 
+        printf ("there was an error in creating the disk\n");
+        exit(1);
     }
-
     ret = sfs_format (DISKNAME);
     if (ret != 0) {
-	printf ("there was an error in format\n");
-	exit(1); 
+        printf ("there was an error in format\n");
+        exit(1);
     }
     // ****************************************************
 
-    ret = sfs_mount (DISKNAME); 
+    ret = sfs_mount (DISKNAME);
     if (ret != 0) {
-	printf ("could not mount \n");
-	exit (1); 
+        printf ("could not mount \n");
+        exit (1);
     }
 
-    printf ("creating files\n"); 
+    printf ("creating files\n");
     sfs_create ("file1.bin");
     sfs_create ("file2.bin");
     sfs_create ("file3.bin");
-    printf (" files created\n");
 
-    int fd3=99;
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
-    sfs_close(fd1);
-    fd3 = sfs_open ("file2.bin", MODE_APPEND);
-    printf("fd1: %d\n",fd1);
+    for (i = 0; i < 2000; ++i) {
+        buffer[0] =   (char) 65;
+        sfs_append (fd1, (void *) buffer, 1);
+    }
 
-    printf("fd2: %d\n",fd2);
-    printf("fd3: %d\n",fd3);
+    for (i = 0; i < 200; ++i) {
+        buffer[0] = (char) 70;
+        buffer[1] = (char) 71;
+        buffer[2] = (char) 72;
+        buffer[3] = (char) 73;
+        sfs_append(fd2, (void *) buffer, 4);
+    }
+
+    sfs_close(fd1);
 
     sfs_close(fd2);
-printf("FD2 size should be -1%d\nFD3 size should be 0%d\n",sfs_getsize(fd2),sfs_getsize(fd3));
-
-       for (i = 0; i < 2000;++i) {
-       buffer[0] =   (char) 65;
-       sfs_append (fd3, (void *) buffer, 1);
-       }
-       buffer[0]='k';
-    for (i = 0; i < 1; ++i) {
-        sfs_read (fd3, (void *) buffer, 20);
-        char* str = (char*) buffer;
-        printf("C:%s\n",str);
-    }
-/*
-       for (i = 0; i < 10000; ++i) {
-       buffer[0] = (char) 70;
-       buffer[1] = (char) 71;
-       buffer[2] = (char) 72;
-       buffer[3] = (char) 73;
-       sfs_append(fd2, (void *) buffer, 4);
-       }
-
-   /* sfs_close(fd1);
-    sfs_close(fd2); 
 
     fd = sfs_open("file3.bin", MODE_APPEND);
-    for (i = 0; i < 10000; ++i) {
-	memcpy (buffer, buffer2, 8); // just to show memcpy
-	sfs_append(fd, (void *) buffer, 8); 
+    for (i = 0; i < 20; ++i) {
+        memcpy (buffer, buffer2, 8); // just to show memcpy
+        sfs_append(fd, (void *) buffer, 8);
 
     }
-    sfs_close (fd); 
+    sfs_close (fd);
 
     fd = sfs_open("file3.bin", MODE_READ);
     size = sfs_getsize (fd);
     for (i = 0; i < size; ++i) {
-	sfs_read (fd, (void *) buffer, 1);
-	c = (char) buffer[0];
+        sfs_read (fd, (void *) buffer, 1);
+        c = (char) buffer[0];
+        printf("%c",c);
     }
-
-    sfs_close (fd); */
-    
-    ret = sfs_umount(); 
+    sfs_close (fd);
+sfs_delete("file3.bin");
+    ret = sfs_umount();
 }
