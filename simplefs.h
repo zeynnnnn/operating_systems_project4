@@ -16,6 +16,7 @@ void updateFileInfos( int n,int , int k);
 void readFileInfos( int n,int*, int *k, char* exists);
 void updateFatInfos(int blockno,int newValue, int);
 int findNextBlockFromFat(int startBlock);
+void updateOpenFileInfos(int fd,int newReadStart);
 void updateFatChar(int blockno,char used);
 int sfs_format (char *vdiskname);
 /*

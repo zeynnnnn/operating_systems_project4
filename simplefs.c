@@ -22,6 +22,7 @@ typedef struct  {
     char exist;
     int mode;
     int openFilePointer;
+    int lastreadLocation;
 } aOpenFileEntry;
 
 typedef struct {
@@ -121,7 +122,7 @@ int sfs_format (char *vdiskname)
         superblock[j]='k';
     }
    // *(int*)superblock= size;
-     aOpenFileEntry emptyOpenFile = {'N',-1,-1};
+     aOpenFileEntry emptyOpenFile = {'N',-1,-1,0};
     int k =-1;
     emptyOpenFile.openFilePointer= k;
    // printf("exist: %c \n",emptyOpenFile.exist);
@@ -298,7 +299,7 @@ int sfs_open(char *filename, int mode)
         aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ k* sizeof(aOpenFileEntry))  ;
         printf("Char at the beginning of iter :%c \n",iter->exist);
         if (iter->exist=='N') {
-
+            iter->lastreadLocation=0;
             iter->exist='F';
             iter->mode=mode;
             iter->openFilePointer=actualFileInfoLocation;
@@ -323,6 +324,7 @@ int sfs_close(int fd){
             iter->exist='N';
             iter->mode=-1;
             iter->openFilePointer=-1;
+            iter->lastreadLocation=-1;
             printf("Close Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
             if( -1==write_block(superblock,0))
                 return -1;
@@ -367,48 +369,73 @@ int sfs_read(int fd, void *buf, int n){
             return -1;
         }
         if( iter->openFilePointer!=-1){
+
+            int startOfRead= iter->lastreadLocation;
             int startPointer;
             int length =-1;
             char exist;
             readFileInfos(iter->openFilePointer,&length,&startPointer,&exist);
-            if(length<n)
+            if(length-startOfRead<n)
             {
                 printf("n is bigger than File Size!");
                 return -1;
             }
-            double value=length;
+            //what to
+            double value=length-startOfRead;
             double divider=BLOCKSIZE;
             double result =value/divider;
            double maxIndex2 =ceil(result);
            int maxIndex=maxIndex2;
             double number =(double)n;
-
             result =number/divider;
             double wantedByteIndex2= ceil(result );
            int wantedByteIndex=wantedByteIndex2;
+
+
+           int blockToReadID= startOfRead/BLOCKSIZE;
+           int blockToReadOffset= startOfRead%BLOCKSIZE;
            int t=0;
            int counter=0;
+           int notReadNumber=n;
+            for (int i = 0; i < blockToReadID; i++) {
+                startPointer= findNextBlockFromFat( startPointer);
+            }
            while( (startPointer!=-1)&&(counter<=maxIndex)) {
-
                counter++;
                int dataBlockNumber = startPointer +1024+ 8;
-               if (counter  == wantedByteIndex) {
+               if (counter  == 1) {
+                   char firstBlock[BLOCKSIZE];
+                   read_block(&firstBlock, dataBlockNumber);
+                   for (t = 0; t< BLOCKSIZE- blockToReadOffset; t++) {
+                       char* pointerIterInBuf=((char *) buf + t );
+                       *(pointerIterInBuf) = firstBlock[t+blockToReadOffset];
+                       notReadNumber--;
+                   }
+               } else if( (counter  == wantedByteIndex) &&notReadNumber<BLOCKSIZE){
                    char lastBlock[BLOCKSIZE];
                    read_block(&lastBlock, dataBlockNumber);
-                   for (t = 0; t < (n % BLOCKSIZE); t++) {
-                       char* pointerIterInBuf=((char *) buf + t + ((counter - 1) * BLOCKSIZE));
+                   int earlierReadCount =n-notReadNumber;
+                   for (t = 0; t < notReadNumber; t++) {
+                       char* pointerIterInBuf=((char *) buf +t+earlierReadCount);
                        *(pointerIterInBuf) = lastBlock[t];
+                       notReadNumber--;
                    }
-                 //  printf(" after change: %s\n", (char*)buf );
                    break;
+               } else
+               {
+                   read_block(((char *) buf + BLOCKSIZE * counter), dataBlockNumber);
+                   notReadNumber=notReadNumber-BLOCKSIZE;
                }
-               printf("BURDAAAA: %c\n",*((char *) buf + BLOCKSIZE * counter));
-              read_block(((char *) buf + BLOCKSIZE * counter), dataBlockNumber);
-               printf("SONRA:%c\n",*((char *) buf + BLOCKSIZE * counter));
+
+            //   printf("BURDAAAA: %c\n",*((char *) buf + BLOCKSIZE * counter));
+
+          //     printf("SONRA:%c\n",*((char *) buf + BLOCKSIZE * counter));
 
                startPointer= findNextBlockFromFat( startPointer);
 
            }
+           startOfRead=startOfRead+n;
+            updateOpenFileInfos(fd,startOfRead);
             return ( counter-1)*BLOCKSIZE+t;
         }
         else
@@ -455,7 +482,7 @@ int sfs_append(int fd, void *buf, int n)
 
     if (iter->exist=='F') {
         if (iter->mode==MODE_APPEND){
-        printf("fd's aopenfileentry status :%c \n",iter->exist);
+        printf("\n\nfd's aopenfileentry status :%c \n",iter->exist);
         if( iter->openFilePointer!=-1){
             int startBlockNo;
             int length ;
@@ -469,7 +496,7 @@ int sfs_append(int fd, void *buf, int n)
                 updateFileInfos(iter->openFilePointer,0,emptyFATEntry);
                 startBlockNo =emptyFATEntry;
             }
-            printf("fd's lenght :%d \n\n",length);
+            printf("fd's lenght :%d \n",length);
             printf("fd's aopenfileentry startblock :%d \n",startBlockNo);
             int iterLen =length;
           //  long lastNotNullStartBlockNo =NULL;
@@ -525,8 +552,6 @@ int sfs_append(int fd, void *buf, int n)
             //update file length
 
            updateFileInfos(iter->openFilePointer,n,-1);
-
-
             return counter*BLOCKSIZE+t;
         }
         else
@@ -577,6 +602,16 @@ void updateFileInfos(int blockno,int length,int startnewBlock)
 
     (blackfat[ (blockno)%(BLOCKSIZE/ sizeof(aFileEntry))]).fileLength+=length;
     write_block(blackfat,1+blockno/(BLOCKSIZE/ sizeof(aFileEntry)));
+
+}
+void updateOpenFileInfos(int fd,int newReadStart)
+{
+    char* superBlock[BLOCKSIZE/ sizeof(char)];
+ //   aOpenFileEntry blackfat[10];
+    read_block(&superBlock,0);
+    aOpenFileEntry * ptr= ( (aOpenFileEntry*)((char*)superBlock+fd));
+   ptr->lastreadLocation=newReadStart;
+    write_block(superBlock,0);
 
 }
 void readFileInfos(int blockno,int* length,int *startnewBlock, char*exists)
