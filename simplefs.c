@@ -48,7 +48,7 @@ aOpenFileEntry openFileBlock[10];
 // size = 2^m Bytes
 int create_vdisk (char *vdiskfilename, int m)
 {
-    printf("SIZE OF AFATENTRY:%d,afileentry%d, aopenfileEntry%d", sizeof(aFatEntry), sizeof(aFileEntry), sizeof(aOpenFileEntry));
+   // printf("SIZE OF AFATENTRY:%d,afileentry%d, aopenfileEntry%d", sizeof(aFatEntry), sizeof(aFileEntry), sizeof(aOpenFileEntry));
     char command[BLOCKSIZE];
     int num = 1;
     int count; 
@@ -123,6 +123,7 @@ int sfs_format (char *vdiskname)
     for (int j = 0; j < BLOCKSIZE; ++j) {
         superblock[j]='k';
     }
+    *(int*)superblock=size;
    int writenByteCount= write_block(superblock,0);
     if(writenByteCount < 0)
     {
@@ -131,45 +132,15 @@ int sfs_format (char *vdiskname)
     }
 
     //Init openfile entry table
-    // *(int*)superblock= size;
+
     aOpenFileEntry emptyOpenFile = {'N',-1,-1,0};
     int k =-1;
     emptyOpenFile.openFilePointer= k;
     // printf("exist: %c \n",emptyOpenFile.exist);
     for (int i = 0; i < 10; i++) {
         openFileBlock[i] =  emptyOpenFile;
-        //  printf("Struct in the will be written:%d\n\n" ,( *( aOpenFileEntry*)(superblock+i* sizeof( aOpenFileEntry)+ sizeof(int))).mode);
     }
-       for (int j = 0; j < 10; j++) {
-           printf("%c",openFileBlock[j].exist);
-       }
 
-
-
-
-    char written[BLOCKSIZE] ;
-    for (int j = 0; j < BLOCKSIZE; j++) {
-        written[j]='O';
-    }
-   /* printf("Written From file: %s \n", written);
-    printf("Written From file: %d \n", sizeof(written));*/
-    /*  if (read_block(written,0)==0) // read succesfull                            ///test
-      {
-          aOpenFileEntry * wr ;
-          wr =((char*)written+1);
-         //for (int j = 0; j < BLOCKSIZE; j++) {
-         //   printf("%c",written[j]);
-         //}
-   //    printf("Written From file: %d \n", sizeof(written));
-    for (int j = 0; j < 10;j++) {
-        aOpenFileEntry * wr ;
-        wr =((char*)written+j* sizeof( aOpenFileEntry)+ sizeof(int));
-           //  aOpenFileEntry wr =*( aOpenFileEntry*)(written[1+j* sizeof( aOpenFileEntry)]);
-            printf("WrittenFrom file: %c\n",wr->exist);
-        }
-    }
-    else
-        printf("boj");*/
     //file directory entries init
      aFileEntry directoryBlock [BLOCKSIZE/128];
          //   ={ {  .fileLength = -1, .startBlock = NULL, .exist = 'N', .filename="",.notUsed="" } };
@@ -194,12 +165,14 @@ int sfs_format (char *vdiskname)
 
 
     // FAT init
+    //make every fat block available
     aFatEntry aFatBlock [sizeof(aFatEntry)];
     for (int u=0;u<(BLOCKSIZE/8);u++)
     {
         aFatBlock[u].used='N';
         aFatBlock[u].nextFat=-1;
     }
+
     for(int k=0;k<1024;k++){
         if(write_block(aFatBlock,8+k) < 0)
         {
@@ -208,7 +181,50 @@ int sfs_format (char *vdiskname)
         }
     }
 
-    vdisk_fd =-1;
+    //make bigger than disk size fat block unavailable
+    int realDataBlockCount= (size/BLOCKSIZE) -1032;
+    int fileSizeIsNotLargeEnoughSinceBlockNoOffset=realDataBlockCount%(BLOCKSIZE/ sizeof(aFatEntry));
+    int fileSizeIsNotLargeEnoughSinceBlockNoFatBlockNo=realDataBlockCount/(BLOCKSIZE/ sizeof(aFatEntry));
+    for (int u=fileSizeIsNotLargeEnoughSinceBlockNoOffset;u<(BLOCKSIZE/ sizeof(aFatEntry));u++)
+    {
+        aFatBlock[u].used='F';
+        aFatBlock[u].nextFat=-1;
+    }
+    if(write_block(aFatBlock,8+fileSizeIsNotLargeEnoughSinceBlockNoFatBlockNo) < 0)
+    {
+        printf ("Error source:5  \n");
+        return -1;
+    }
+    for (int u=0;u<(BLOCKSIZE/ sizeof(aFatEntry));u++)
+    {
+        aFatBlock[u].used='F';
+        aFatBlock[u].nextFat=-1;
+    }
+    for(int k=fileSizeIsNotLargeEnoughSinceBlockNoFatBlockNo+1;k<1024;k++){
+        if(write_block(aFatBlock,8+k) < 0)
+        {
+            printf ("Error source:5  \n");
+            return -1;
+        }
+    }
+
+
+    aFatEntry written[BLOCKSIZE/ sizeof(aFatEntry)] ;
+
+    /* printf("Written From file: %s \n", written);
+     printf("Written From file: %d \n", sizeof(written));*/
+    for(int y =0; y<1024;y++){
+        if (read_block(written,8+y)==0) // read succesfull                            ///test
+        {
+            printf("\nWritten From Fat block: %d \n", y);
+            for (int j = 0; j <( BLOCKSIZE/ sizeof(aFatEntry)); j++) {
+                printf("%c",written[j].used);
+            }
+        }
+        else
+            printf("boj");
+        }
+        vdisk_fd =-1;
     if(-1==close(mainFd))
         return -1;
 
@@ -253,7 +269,7 @@ int sfs_create(char *filename)
            if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
                break;
        }
-       printf("i:%d y:%d",i,y);
+  //     printf("i:%d y:%d",i,y);
         aFileEntry * iter ;
         iter=& fileBlocks[i][y];
        strcpy ( iter->filename,filename);
@@ -292,7 +308,7 @@ int sfs_open(char *filename, int mode)
         if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
             break;
     }
-    printf("i:%d y:%d",i,y);
+ //   printf("i:%d y:%d",i,y);
     if (i>=7)
         return -1;
     int actualFileInfoLocation ;
@@ -306,17 +322,12 @@ int sfs_open(char *filename, int mode)
     for (k =0;k<10;k++)
     {
         aOpenFileEntry* iter= & openFileBlock[k]  ;
-        printf("Char at the beginning of iter :%c \n",iter->exist);
+     //   printf("Char at the beginning of iter :%c \n",iter->exist);
         if (iter->exist=='N') {
             iter->lastreadLocation=0;
             iter->exist='F';
             iter->mode=mode;
             iter->openFilePointer=actualFileInfoLocation;
-
-          //  aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ k* sizeof(aOpenFileEntry))  ;
-       //     printf("open Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
-        /*   if( -1==write_block(superblock,0))
-               return -1;*/
             return k;
         }
     }
@@ -329,13 +340,13 @@ int sfs_close(int fd){
         return -1;
         */
     aOpenFileEntry* iter= & openFileBlock[fd]  ;
-    printf("Close Called BEFORE:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
+  //  printf("Close Called BEFORE:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
         if (iter->exist=='F') {
             iter->exist='N';
             iter->mode=-1;
             iter->openFilePointer=-1;
             iter->lastreadLocation=-1;
-            printf("Close Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
+         //   printf("Close Called AFTER:%c \nMode: %d \n Actual Pointer :%d",iter->exist,iter->mode,iter->openFilePointer);
           /*  if( -1==write_block(superblock,0))
                 return -1;*/
             return 0;
@@ -351,7 +362,7 @@ int sfs_getsize (int  fd)
         return -1;*/
     aOpenFileEntry* iter= & openFileBlock[fd]  ;
 
-    printf("Char at the beginning of iter :%c \n",iter->exist);
+  //  printf("Char at the beginning of iter :%c \n",iter->exist);
     if (iter->exist=='F') {
        if( iter->openFilePointer!=-1)
        {
@@ -439,11 +450,6 @@ int sfs_read(int fd, void *buf, int n){
                    read_block(((char *) buf + BLOCKSIZE * counter), dataBlockNumber);
                    notReadNumber=notReadNumber-BLOCKSIZE;
                }
-
-            //   printf("BURDAAAA: %c\n",*((char *) buf + BLOCKSIZE * counter));
-
-          //     printf("SONRA:%c\n",*((char *) buf + BLOCKSIZE * counter));
-
                startPointer= findNextBlockFromFat( startPointer);
 
            }
@@ -511,22 +517,17 @@ int sfs_append(int fd, void *buf, int n)
                 updateFileInfos(iter->openFilePointer,0,emptyFATEntry);
                 startBlockNo =emptyFATEntry;
             }
-        //    printf("fd's lenght :%d \n",length);
-       //     printf("fd's aopenfileentry startblock :%d \n",startBlockNo);
-            int iterLen =length;
-          //  long lastNotNullStartBlockNo =NULL;
 
+            int iterLen =length;
             //iterate used blocks
             while ((startBlockNo!=-1)&& (iterLen>BLOCKSIZE)) {
                 iterLen=iterLen-BLOCKSIZE;
                 startBlockNo= findNextBlockFromFat( startBlockNo);
             }
 
-    //        printf("fd's aopenfileentry startblock :%d \n",startBlockNo);
 
 
             int notWrittenByteNumber=n;
-//readFileInfos(iter->openFilePointer,&length,&startBlockNo);
             int t=0;
             int counter=0;
           char halfBlock[BLOCKSIZE];
@@ -610,7 +611,7 @@ void updateFileInfos(int blockno,int length,int startnewBlock)
     int aimedblockno= blockno/(BLOCKSIZE/ sizeof(aFileEntry));
     read_block(&blackfat,aimedblockno+1);
     if(startnewBlock!=-1){
-       printf("girdi");
+      // printf("girdi");
         ( blackfat[ (blockno%(BLOCKSIZE/ sizeof(aFileEntry)))]).startBlock=startnewBlock;
         updateFatInfos(-1,startnewBlock,0);
     }

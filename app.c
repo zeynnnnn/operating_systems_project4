@@ -21,7 +21,7 @@ int main()
     // ****************************************************
     // if this is the first running of app, we can
     // create a virtual disk and format it as below
-    ret  = create_vdisk (DISKNAME, 24); // size = 16 MB
+    ret  = create_vdisk (DISKNAME, 21); // size = 16 MB
     if (ret != 0) {
         printf ("there was an error in creating the disk\n");
         exit(1);
