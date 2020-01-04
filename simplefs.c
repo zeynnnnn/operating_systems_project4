@@ -153,7 +153,7 @@ int sfs_format (char *vdiskname)
         directoryBlock[u].fileLength =-1;
         strcpy( directoryBlock[u].notUsed,"");
     }
-    printf("%c\n",directoryBlock[4].exist);
+
 
     for (int t=0;t<7;t++){
         //   writenByteCount=  write(mainFd,&emptyEntry, sizeof( aFileEntry));
@@ -209,10 +209,8 @@ int sfs_format (char *vdiskname)
     }
 
 
-    aFatEntry written[BLOCKSIZE/ sizeof(aFatEntry)] ;
-
-    /* printf("Written From file: %s \n", written);
-     printf("Written From file: %d \n", sizeof(written));*/
+  /*
+   *  aFatEntry written[BLOCKSIZE/ sizeof(aFatEntry)] ;
     for(int y =0; y<1024;y++){
         if (read_block(written,8+y)==0) // read succesfull                            ///test
         {
@@ -224,6 +222,7 @@ int sfs_format (char *vdiskname)
         else
             printf("boj");
         }
+        */
         vdisk_fd =-1;
     if(-1==close(mainFd))
         return -1;
@@ -250,7 +249,7 @@ int sfs_umount ()
 
 int sfs_create(char *filename)
 {
-    //printf("afileentrysize:%d", sizeof(aFileEntry));
+
      aFileEntry fileBlocks[7][BLOCKSIZE/ sizeof( aFileEntry)];
      for (int k =1;k<8;k++)
      {
@@ -269,7 +268,7 @@ int sfs_create(char *filename)
            if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
                break;
        }
-  //     printf("i:%d y:%d",i,y);
+
         aFileEntry * iter ;
         iter=& fileBlocks[i][y];
        strcpy ( iter->filename,filename);
@@ -308,21 +307,16 @@ int sfs_open(char *filename, int mode)
         if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
             break;
     }
- //   printf("i:%d y:%d",i,y);
     if (i>=7)
         return -1;
     int actualFileInfoLocation ;
     actualFileInfoLocation=(BLOCKSIZE/ sizeof(aFileEntry))*i+y;
-   /* char superblock[BLOCKSIZE];
-    if (read_block(&superblock,0)==-1)
-        return -1;
-        */
+
     int k=-1;
 
     for (k =0;k<10;k++)
     {
         aOpenFileEntry* iter= & openFileBlock[k]  ;
-     //   printf("Char at the beginning of iter :%c \n",iter->exist);
         if (iter->exist=='N') {
             iter->lastreadLocation=0;
             iter->exist='F';
@@ -378,14 +372,8 @@ int sfs_getsize (int  fd)
 
 int sfs_read(int fd, void *buf, int n){
 
-  /*  char superblock[BLOCKSIZE];
-    int result =read_block(&superblock,0);
-    if (result !=0)
-        return -1;
-        */
     aOpenFileEntry* iter= & openFileBlock[fd]  ;
- //   aOpenFileEntry * iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry) ) ;
-  //  printf("Char at the beginning of iter :%c \n",iter->exist);
+
     if (iter->exist=='F') {
         if (iter->mode!=MODE_READ)
         {
@@ -494,16 +482,11 @@ int  nextEmptyFinder(){
 
 int sfs_append(int fd, void *buf, int n)
 {
-    /*char superblock[BLOCKSIZE];
-    if (read_block(&superblock,0)==-1)
-        return -1;
-        */
-   // aOpenFileEntry* iter= (aOpenFileEntry*) (superblock+ fd* sizeof(aOpenFileEntry))  ;
     aOpenFileEntry* iter= & openFileBlock[fd]  ;
 
     if (iter->exist=='F') {
         if (iter->mode==MODE_APPEND){
-   //     printf("\n\nfd's aopenfileentry status :%c \n",iter->exist);
+
         if( iter->openFilePointer!=-1){
             int startBlockNo;
             int length ;
@@ -524,8 +507,6 @@ int sfs_append(int fd, void *buf, int n)
                 iterLen=iterLen-BLOCKSIZE;
                 startBlockNo= findNextBlockFromFat( startBlockNo);
             }
-
-
 
             int notWrittenByteNumber=n;
             int t=0;
@@ -668,11 +649,13 @@ int sfs_delete(char *filename)
         if(y< (BLOCKSIZE/ sizeof(aFileEntry)))
             break;
     }
-    printf("i:%d y:%d",i,y);
+  //  printf("i:%d y:%d",i,y);
     aFileEntry * iter ;
     iter=& fileBlocks[i][y];
     iter->exist='N';
+    strcpy ((fileBlocks[i][y]).filename,"filename");
     iter->fileLength=-1;
+    write_block(fileBlocks[i],i+1); //1 comes from superblock
     int iterBlock =iter->startBlock;
     int iterBlock2=-2;
     while (iterBlock2!=-1)
@@ -680,7 +663,7 @@ int sfs_delete(char *filename)
         iterBlock2=findNextBlockFromFat(iterBlock);
         updateFatInfos(iterBlock,-1,1);
     }
-    write_block(fileBlocks[i],i+1); //1 comes from superblock
+
 
     return (0);
 }

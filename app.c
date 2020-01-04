@@ -89,8 +89,16 @@ int main()
         printf("%c",c);
     }
     sfs_close (fd);
-//sfs_delete("file3.bin");
+    sfs_delete("file3.bin");
 
+    fd = sfs_open("file3.bin", MODE_READ);
+    size = sfs_getsize (fd);
+    for (i = 0; i < size; ++i) {
+        sfs_read (fd, (void *) buffer, 1);
+        c = (char) buffer[0];
+        printf("%c",c);
+    }
+    sfs_close (fd);
 
     fd = sfs_open("file2.bin", MODE_READ);
     size = sfs_getsize (fd);
